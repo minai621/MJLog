@@ -6,15 +6,14 @@ const siteMetadata = {
   description: "Frontend Developer MJ's Blog",
   language: 'ko-KR',
   theme: 'system', // system, dark or light
-  // TODO
-  siteUrl: 'https://tailwind-nextjs-starter-blog.vercel.app',
-  siteRepo: 'https://github.com/timlrx/tailwind-nextjs-starter-blog',
+  siteUrl: 'https://mj-dev.site',
+  siteRepo: 'https://github.com/minai621.MJLog',
   siteLogo: '/static/images/logo.webp',
-  socialBanner: '/static/images/twitter-card.png',
+  socialBanner: '/static/images/logo.webp',
   mastodon: 'https://mastodon.social/@mastodonuser',
   email: 'minai621@naver.com',
   github: 'https://github.com/minai621',
-  linkedin: 'https://www.linkedin.com/in/%EB%AF%BC%EC%A0%9C-%EA%B3%B5-5a1067310/',
+  linkedin: 'https://www.linkedin.com/in/mj-dev',
   instagram: 'https://www.instagram.com/mj_ssu_ai',
   locale: 'ko-KR',
   analytics: {
