@@ -1,6 +1,6 @@
 /** @type {import("pliny/config").PlinyConfig } */
 const siteMetadata = {
-  title: 'MJLog',
+  title: 'FE-엔지니어 MJ 테크 블로그',
   author: 'MJ',
   headerTitle: 'MJLog',
   description: "Frontend Developer MJ's Blog",
@@ -9,7 +9,7 @@ const siteMetadata = {
   // TODO
   siteUrl: 'https://tailwind-nextjs-starter-blog.vercel.app',
   siteRepo: 'https://github.com/timlrx/tailwind-nextjs-starter-blog',
-  siteLogo: '/static/images/logo.png',
+  siteLogo: '/static/images/logo.webp',
   socialBanner: '/static/images/twitter-card.png',
   mastodon: 'https://mastodon.social/@mastodonuser',
   email: 'minai621@naver.com',
