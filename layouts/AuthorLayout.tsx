@@ -1,7 +1,7 @@
-import { ReactNode } from 'react'
-import type { Authors } from 'contentlayer/generated'
-import SocialIcon from '@/components/social-icons'
 import Image from '@/components/Image'
+import SocialIcon from '@/components/social-icons'
+import type { Authors } from 'contentlayer/generated'
+import { ReactNode } from 'react'
 
 interface Props {
   children: ReactNode
@@ -19,14 +19,14 @@ export default function AuthorLayout({ children, content }: Props) {
             About
           </h1>
         </div>
-        <div className="items-start space-y-2 xl:grid xl:grid-cols-3 xl:gap-x-8 xl:space-y-0">
-          <div className="flex flex-col items-center space-x-2 pt-8">
+        <div className="items-start space-y-2">
+          <div className="flex flex-col items-center justify-center space-x-2 pt-8">
             {avatar && (
               <Image
                 src={avatar}
                 alt="avatar"
-                width={192}
-                height={192}
+                width={256}
+                height={256}
                 className="h-48 w-48 rounded-full"
               />
             )}
