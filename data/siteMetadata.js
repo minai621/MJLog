@@ -7,7 +7,7 @@ const siteMetadata = {
   language: 'ko-KR',
   theme: 'system', // system, dark or light
   siteUrl: 'https://mj-dev.site',
-  siteRepo: 'https://github.com/minai621.MJLog',
+  siteRepo: 'https://github.com/minai621/MJLog',
   siteLogo: '/static/images/logo.webp',
   socialBanner: '/static/images/logo.webp',
   mastodon: 'https://mastodon.social/@mastodonuser',
