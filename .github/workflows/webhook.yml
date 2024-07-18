@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Trigger deployment
         run: |
-          curl -X POST https://mj-dev.site:3001/webhook \
+          curl -X POST https://mj-dev.site:3100/webhook \
           -H "Content-Type: application/json" \
           -H "X-Hub-Signature: sha1=${{ secrets.WEBHOOK_SECRET }}" \
           -d '{"event": "push"}'
