@@ -10,12 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger deployment
-        run: |
-          curl -X POST https://mj-dev.site/webhook/pull \
-          -H "Content-Type: application/json" \
-          -H "Authorization: Bearer ${WEBHOOK_TOKEN}" \
-          -d '{"event": "push"}'
-          --connect-timeout 30 \
-          --max-time 300
         env:
           WEBHOOK_TOKEN: ${{ secrets.WEBHOOK_SECRET }}
+        run: |
+          curl -X POST https://mj-dev.site/webhook/pull \
+            --connect-timeout 30 \
+            --max-time 300 \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${WEBHOOK_TOKEN}" \
+            -d '{"event": "push"}'
