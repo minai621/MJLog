@@ -13,5 +13,7 @@ jobs:
         run: |
           curl -X POST https://mj-dev.site/webhook/pull \
           -H "Content-Type: application/json" \
-          -H "Authorization: Bearer ${{ secrets.WEBHOOK_TOKEN }}" \
+          -H "Authorization: Bearer ${WEBHOOK_TOKEN}" \
           -d '{"event": "push"}'
+        env:
+          WEBHOOK_TOKEN: ${{ secrets.WEBHOOK_TOKEN }}
