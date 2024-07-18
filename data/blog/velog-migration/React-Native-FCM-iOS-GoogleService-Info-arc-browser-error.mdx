@@ -1,0 +1,37 @@
+---
+title: 'React-Native FCM iOS GoogleService-Info가 arc 브라우저로 다운받으면 적용이 안되는 문제'
+date: '2024-01-28'
+tags: ['react-native', 'firebase', 'ios']
+draft: false
+summary: 'arc 브라우저로 파일 다운로드 받지 않고 chrome으로 받아야 하는 이유'
+---
+
+# 에러가 발생한 환경
+
+device: macbook m3 pro
+os: Sonoma 14.2
+Xcode: 15.1
+react-native: 0.73.1
+@react-native-firebase/app: 18.8.0
+browser: arc -> chrome
+
+## AppDelegate.mm 설정이 적용이 안된다.
+
+```swift
+[FIRApp configure];
+```
+
+해당 코드를 적용하고 `yarn run ios`로 실행하면 다음과 같은 에러가 발생하면서 앱이 켜지지 않았습니다.
+
+```
+react-native run-ios build failure "x86_64 objective-c com.apple.compilers.llvm.clang.1_0.compiler
+```
+
+혹은 아래와 같은 이미지가 나오게 됩니다.
+![](https://velog.velcdn.com/images/mindev/post/41a622d3-f296-4e22-b320-19a4d6b5f0c8/image.png)
+
+## 원인 및 해결방법
+
+arc 브라우저로 GoogleService-Info를 다운 받으면 "프로젝트명 info.plist"로 다운이 됩니다. 직접 파일명을 바꿔서 적용해도 파일이 정상인식 되지 않아서 에러가 발생했습니다.
+
+브라우저를 chrome으로 바꿔서 저장하면 GoogleService-Info로 정상적으로 저장이 되고,적용도 정상으로 되어 해당 에러가 더이상 발생하지 않습니다.

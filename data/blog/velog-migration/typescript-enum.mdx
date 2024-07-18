@@ -1,0 +1,143 @@
+---
+title: '[ts] enum에 대한 고찰'
+date: '2024-04-25'
+tags: ['JavaScript', 'typescript']
+draft: false
+summary: 'typescript에서 enum은 어떻게 컴파일되는지 살펴봅니다.'
+---
+
+## enum은 컴파일된다.
+
+typescript를 사용하실 때, enum을 사용해보신 적이 있으신가요?
+`enum`은 typescript에서만 제공하는 기능이기 때문에, typescript에서 javascript로 컴파일됩니다.
+enum이 컴파일이 되면 어떻게 될까요?
+
+### enum을 컴파일 해보자.
+
+다시 생각하면 javascript에는 enum이 존재하지 않습니다.
+typescript의 enum은 javascript에서 어떻게 표현될까요?
+
+```ts
+// typescript
+enum Color {
+  Red = 1,
+  Green = 2,
+  Blue = 4,
+}
+
+// javascript
+var Color
+;(function (Color) {
+  Color[(Color['Red'] = 1)] = 'Red'
+  Color[(Color['Green'] = 2)] = 'Green'
+  Color[(Color['Blue'] = 4)] = 'Blue'
+})(Color || (Color = {}))
+```
+
+var 키워드에 Color라는 이름을 가진 변수가 생성됐고, 즉시 실행함수로 Color 객체에 Red = 1, Green = 2, Blue = 4와 같이 데이터가 매핑돼서 Color.Red는 1, Color[1] = "Red"로 할당됐습니다.
+
+번들러들은 이러한 즉시실행함수를 트리쉐이킹(불필요한 코드를 제거)하는 과정에 포함하지 않는다고 하는데요. typescript에서 enum을 사용할 때마다 즉시실행함수로 객체를 만들어내면서 번들러 사이즈가 커진다는 단점이 있습니다.
+
+#### const enum을 사용하면 해결할 수 있다
+
+```js
+const enum Color {
+    Red = 1,
+    Green = 2,
+    Blue = 4
+}
+console.log(Color.Red); // 1
+```
+
+`즉시실행함수`니 `번들링`이니 복잡한 이야기를 했지만, 결국 const 키워드를 붙이면 트리쉐이킹 과정에서 번들링에 포함되지 않습니다.
+cosnt 키워드를 붙인 enum은 다음과 같이 컴파일됩니다.
+
+```ts
+const enum Color {
+  Red = 1,
+  Green = 2,
+  Blue = 4,
+}
+console.log(1) // Color.Red가 1로 치환됐습니다.
+```
+
+enum에 할당한 데이터가 아예 원시값으로 변환된 형태로 컴파일됩니다.
+따라서, 즉시실행함수로 객체에 데이터를 매핑하는 과정을 거치지 않으며 코드 자체에 원시값으로 치환되기 때문에 번들링 크기에 영향을 주지 않습니다.
+const 키워드를 붙이면 왜 원시값으로 치환되는걸까요? 또, const 키워드를 붙이지 않으면 왜 즉시실행함수로 객체를 만들까요?
+또한, 정말 번들링 사이즈가 줄어드는게 맞을까요?
+
+### (조금 더 알아보기) const 키워드는 컴파일 시점에 데이터를 결정할까요?
+
+javascript를 학습할 때, 우리는 const 키워드에 대해 다음과 같이 학습합니다.
+
+> const는 단어 constant에서 유래됐으며, 블록 범위에 변하지 않는 값인 상수 데이터를 할당하고 재할당을 할 수 없습니다.
+
+const는 javascript뿐 아니라 다른 언어에서도 많이 사용하는 키워드입니다. (C++, kotlin 등)
+많은 언어들에서도 아마 const 키워드를 사용하는 이유는 컴파일 시점에 성능을 최적화하거나(상수 폴딩), 불변성을 위해 사용할 것입니다.
+
+하지만, javascript는 인터프리터 언어이다 보니 다음과 같이 런타임중에도 입력을 받을 수 있습니다.
+
+```ts
+const userInput = prompt()
+```
+
+es6 이상에서만 지원하는 const 키워드는 `컴파일 시점에 데이터를 결정하지 않습니다.` 따라서, 다른 언어들의 const 키워드와 다르게 동작합니다. 런타임에 평가됐을 때에는 const로 선언됐고, lexical 정보같은 메타데이터와 함께 데이터가 저장됐을 것입니다.
+
+하지만, 우리가 사용하는 const enum은 typescript에서 평가되기 때문에 다른 언어들처럼 const enum 키워드 자체가 컴파일되어 인라인 원시값을 가지는 js를 생성하게 됩니다.
+
+### typescript에서의 컴파일
+
+enum의 `평가`에 대해 알기 위해 const 키워드까지 알아보았는데요.
+다음과 같은 2개의 사실에 대해서만 집중하면 됩니다.
+
+- typescript에서 enum을 컴파일하면 즉시실행함수로 평가된다.
+- typescript에서 const enum을 컴파일하면 인라인 원시값으로 치환한다.
+- javascript에서 const는 컴파일 시점에 데이터를 결정하지 않는다.
+
+결국 typescript로 작성한 enum은 즉시실행함수로 조금 더 큰 번들링 사이즈를 갖게 되고, const enum은 ts -> js로 컴파일 됐을 때, 다른 언어들처럼 `컴파일`과정을 거쳐 inline 원시값으로 치환된다는 것을 알게 됐습니다.
+
+### 인라인 원시값 vs 즉시실행함수
+
+enum과 const enum을 비교했을 때, 무조건 const enum이 좋을까요?
+다음과 같은 예시를 생각해볼 수 있을 것 같습니다.
+
+```ts
+enum Content {
+  Title: '제목',
+  Body: '매우 많은 내용의 콘텐츠 대충 1만 글자정도',
+}
+
+const enum Content {
+  Title: '제목',
+  Body: '매우 많은 내용의 콘텐츠 대충 1만 글자정도',
+}
+```
+
+만일 해당 코드를 typescript에서 javascript로 컴파일하면, 후자는 Content enum을 사용하는 곳마다 인라인으로 1만 글자 문자열이 생성되게 됩니다.
+결국 많이 사용하고 긴 텍스트를 가진다면 const enum은 변수화가 되지 않았기 때문에 매번 같은 긴 문자열을 여기저기 할당한 js 파일을 생성할테니 번들링 사이즈 감소에는 도움이 되지 못할 것 같습니다.
+
+### 결론
+
+조금 길게 설명해봤지만, 결국 enum을 사용하는 것에는 trade-off가 따릅니다.
+상수 집합을 관리할 때에는 유용하지만 번들링될 때나 타입 좁히기 등 다양한 문제가 존재합니다.
+사실 javascript에서는 Object로도 충분히 상수 집합을 표현할 수가 있는데요.
+
+```typescript
+const RED = 'RED'
+const BLUE = 'BLUE'
+const GREEN = 'GREEN'
+const COLORS = { RED, BLUE, GREEN } as const
+type ColorType = keyof typeof COLORS // 'RED', 'BLUE', 'GREEN'
+```
+
+typescript를 함께 사용하면 as const를 통해 읽기 전용 선언이 가능하고, Union Type으로도 따로 정의하여 사용할 수 있습니다. enum을 쓰지 않아도, IDE가 객체의 key를 제안해주기도 합니다.
+enum은 단점이 많기 때문에, 대부분 object literal방식을 채택하는 것 같습니다.
+
+그래도 현재 프로젝트에서 enum을 통해 상수 집합을 표현하고 있다면, 위와 같이 번들링됐을 때의 트레이드 오프를 계산하고 어떠한 방식을 사용할지 결정하면 좋을 것 같습니다.
+
+#### 참고 자료
+
+https://engineering.linecorp.com/ko/blog/typescript-enum-tree-shaking
+
+enum 사용시 주의사항에 대해 잘 설명한 칼럼이 있어 추가합니다.
+https://velog.io/@jay/typescript-enum-be-careful

@@ -1,0 +1,133 @@
+---
+title: 'redux-saga middleware 초기화(run) 에러 '
+date: '2024-01-09'
+tags: ['redux', 'redux saga', 'redux-saga-middleware']
+draft: false
+summary: 'redux-saga에서 middleware 초기화 에러는 어떻게 고칠까?'
+---
+
+# 발생한 에러
+
+```
+TypeError: Cannot read properties of undefined (reading 'sagaFunction')
+```
+
+redux-saga 코드를 리팩토링 하던 중 위와 같은 에러가 발생했다.
+
+기존 코드는 아래와 같았다.
+
+```typescript
+// rootStore.ts
+import { composeWithDevTools } from '@redux-devtools/extension'
+import { applyMiddleware, legacy_createStore as createStore } from 'redux'
+import { createTransform, persistReducer, persistStore } from 'redux-persist'
+import storage from 'redux-persist/lib/storage'
+import createSagaMiddleware from 'redux-saga'
+import globalReducer from '../reducers'
+import rootSaga from 'redux/sagas'
+
+const rootReducer = globalReducer
+const sagaMiddleware = createSagaMiddleware()
+
+const authTransform = createTransform(
+  // some functions..
+  { whitelist: ['user'] }
+)
+
+const persistConfig = {
+  key: 'root',
+  storage,
+  whitelist: ['sagas'],
+  transforms: [authTransform],
+}
+
+const persistedReducer = persistReducer(persistConfig, rootReducer)
+
+const store = createStore(persistedReducer, composeWithDevTools(applyMiddleware(sagaMiddleware)))
+const persistor = persistStore(store)
+
+sagaMiddleware.run(rootSaga)
+
+export { persistor, store }
+export type AppDispatch = typeof store.dispatch
+export type RootState = ReturnType<typeof rootReducer>
+```
+
+변경한 코드는 아래와 같다.
+
+```typescript
+// rootStore.ts
+import { applyMiddleware, legacy_createStore as createStore } from 'redux'
+import { createTransform, persistReducer, persistStore } from 'redux-persist'
+import storage from 'redux-persist/lib/storage'
+import createSagaMiddleware from 'redux-saga'
+import { rootReducer } from 'redux/reducers/rootReducer'
+import rootSaga from 'redux/sagas/rootSaga'
+
+const authTransform = createTransform(
+  // some functions
+  { whitelist: ['user'] }
+)
+
+const persistConfig = {
+  key: 'root',
+  storage,
+  whitelist: ['sagas'],
+  transforms: [authTransform],
+}
+
+const persistedReducer = persistReducer(persistConfig, rootReducer)
+
+const middleware = createSagaMiddleware({
+  onError: (error: Error) => {
+    console.error(error)
+  },
+})
+
+const store = createStore(persistedReducer, applyMiddleware(middleware))
+const persistor = persistStore(store)
+
+middleware.run(rootSaga)
+
+export { persistor, store }
+
+export type AppDispatch = typeof store.dispatch
+export type RootState = ReturnType<typeof rootReducer>
+```
+
+변경된 코드라고는 composeWithDevTools를 지운 것과 middleware에 onError를 추가했는데
+
+```
+TypeError: Cannot read properties of undefined (reading 'sagaFunction')
+```
+
+saga 함수들을 실행시키지 못하는 문제가 발생했다.
+
+## 문제
+
+saga 함수는 실행에 예민해서, store가 생성되고 나서 적용해야 한다.
+하지만, 내 코드에서는 store 이후에 초기화는 정상적으로 되고 있기 때문에 원인이 될 수 없었다.
+열심히 디버깅한 결과 다음과 같은 코드의 문제점을 찾을 수 있었다.
+![](https://velog.velcdn.com/images/mindev/post/2cacc769-8733-4fdf-8067-903a79821990/image.png)
+
+다양한 곳에서 rootStore가 참조되고 있었고, 이 과정에서 파일을 import 할 때마다 middleware.run() 함수가 실행되고 있었다.
+
+## 해결방법
+
+```tsx
+//index.tsx
+import { middleware, persistor, store } from 'redux/stores/rootStore'
+
+middleware.run(rootSaga)
+
+rootElement.render(
+  <Provider store={store}>
+    <PersistGate loading={null} persistor={persistor}>
+      <App />
+    </PersistGate>
+  </Provider>
+)
+```
+
+middleware.run 함수를 index.tsx에서 단, 한 번만 실행을 시켜 에러를 해결할 수 있었다.
+파일 분리가 항상 좋은 줄 알았는데, 파일 내에서 함수를 실행시키면 로딩할 때마다 실행한다는 것을 알게 됐다..
