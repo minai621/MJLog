@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # 1. 3000번 포트를 사용하는 프로세스 종료
 PORT=3000
 PIDS=$(sudo netstat -tulnp | grep :$PORT | awk '{print $7}' | cut -d/ -f1)
@@ -18,8 +20,16 @@ else
     echo "Port $PORT is not in use."
 fi
 
+# 2. Git Pull
+echo "Pulling latest changes from git repository..."
+git pull
 
-# 2. 프로젝트 빌드
+if [ $? -ne 0 ]; then
+    echo "Git pull failed. Exiting..."
+    exit 1
+fi
+
+# 3. 프로젝트 빌드
 echo "Running pnpm run build..."
 pnpm run build
 
@@ -28,7 +38,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 3. 서버 실행
+# 4. 서버 실행
 echo "Starting the server with pnpm run serve..."
 nohup pnpm run serve &
 
