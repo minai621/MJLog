@@ -15,5 +15,7 @@ jobs:
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer ${WEBHOOK_TOKEN}" \
           -d '{"event": "push"}'
+          --connect-timeout 30 \
+          --max-time 300
         env:
           WEBHOOK_TOKEN: ${{ secrets.WEBHOOK_SECRET }}
