@@ -1,0 +1,87 @@
+---
+title: '클라이언트에서의 비밀번호 암호화는 소용이 없을까? with apple '
+date: '2024-01-26'
+tags: ['front', 'front end', 'frontend', '보안']
+draft: false
+summary: '프론트엔드 개발을 하면서 호기심으로 찾아본 글이므로 본인의 보안은 스스로 고민해서 설계합시다!  한줄요약 https에서는 비밀번호를 평문으로 보내도 걱정없다.  Apple 로그인시 비밀번호를 평문으로 보낸다? 애플로그인 네트워크탭 최근 React에서의 apple 로그인'
+---
+
+> 프론트엔드 개발을 하면서 호기심으로 찾아본 글이므로 본인의 보안은 스스로 고민해서 설계합시다!
+
+## 한줄요약
+
+- https에서는 비밀번호를 평문으로 보내도 걱정없습니다.
+
+# Apple 로그인시 비밀번호를 평문으로 보낸다?
+
+![](https://velog.velcdn.com/images/mindev/post/ccbdd0f9-8f14-4019-bf20-4404386c2bcd/image.png)
+최근 웹뷰에서의 apple 로그인을 구현하기 위해 payload를 확인하던 중 `비밀번호를 평문으로 보낸다`는 것을 알게 됐습니다.
+
+강의나 책으로 처음으로 프론트엔드 학습했을 때 클라이언트에서 비밀번호를 암호화해서 서버에 보내는 것을 학습한 기억이 있어 이 부분이 보안 취약점이 아닌가 애플에 문의해보았습니다.
+
+![](https://velog.velcdn.com/images/mindev/post/7a679cdb-d0b7-4fe6-af5e-de5015e1e613/image.png)
+
+password가 `HTTPS`를 통해 전송되기 때문에 결과적으로 `plain text가 아니라고` 답변이 왔습니다.
+클라이언트단에서 취약점이 발견돼 비밀번호가 노출되면 어떡하지? 라는 고민을 하게 됐고 조금 더 찾아보기로 하였습니다.
+
+## HTTPS
+
+> SSL(TLS) 프로토콜을 사용한다. 웹서버가 클라이언트에게 공개 키를 제공하고, 클라이언트는 이를 통해 대칭 키를 생성한다. 해당 키를 다시 서버의 공개 키로 암호화하여 서버에 전달한다. 서버는 개인 키로 이를 다시 복호화해서 이제 서로 같은 대칭키를 가질 수 있다. 대칭 키를 사용하여 데이터를 암호화 및 복호화한다.
+
+HTTPS는 암호화를 통해 데이터를 안전하게 송수신할 수 있게 해줍니다.
+따라서, 굳이 클라이언트에서 암호화를 해서 보낸다고 더 안전해지지 않는다는 것이었습니다. (클라이언트 코드는 브라우저에 노출이 되어있기도 하고 해싱을 해도 보안 레벨이 올라가지 않습니다)
+
+### 해싱을 한다해도
+
+클라이언트에서 해싱해서 보내면 서버에서 데이터를 다루기 어려워지게 됩니다.
+
+- 해시 함수는 무결하지 않습니다. 나중에 문제가 생겼을 때 서버 데이터를 복구하기 어려워지는 단점이 있습니다.
+- 서버에서 유효성 검사를 할 수 없습니다. 정상적인 텍스트인지 검사할 수 없기 때문에 다른 공격이 생길 수 있습니다.
+
+따라서, 클라이언트 레벨에서의 암호화는 보안 수준을 올리는 것에 전혀 영향을 미치지 않는다고 볼 수 있습니다.
+
+### 기업에서의 비밀번호 관리 (2024년 01월 26일 기준, 직접 확인)
+
+그렇다면 기업에서의 API는 어떻게 돼있을까요?
+
+- 애플: 사진에서 보듯이 password를 plain text로 전송합니다.
+- 카카오: plain text가 아닙니다.
+- 쿠팡: formdata에서 plain text를 볼 수 있습니다.
+
+### 클라이언트단에서 할 수 있는 것
+
+NextJs에서는 rewrite를 사용하여 apikey를 숨길 수 있습니다. (유의미한 보안레벨을 올려주지 않지만 클라이언트에서 조금이라도 노출되는 것을 원치 않는다면 사용해볼 수 있습니다. 추가로 api를 감출 수 있어 서버 보안에는 더 도움은 될 수 있습니다.)
+
+```ts
+// next.config.ts
+async rewrites() {
+    return [
+      {
+        source: '/api/movies',
+        destination: `https://api.themoviedb.org/3/movie/popular?api_key=${API_KEY}`,
+      },
+    ]
+  },
+```
+
+### 보안에 대해서 조금 더 고민해보기
+
+[https://www.boannews.com/media/view.asp?idx=104743](https://www.boannews.com/media/view.asp?idx=104743)
+
+BGP 하이재킹처럼 dns단에서 kakao sdk가 아니라 악성코드가 다운로드되게 하는 해킹시도가 있었습니다.
+
+> Kakao SDK 파일 다운로드 경로는 HTTPS 프로토콜로 연결되기 때문에 BGP Hijacking 공격을 수행하더라도 인증서가 일치하지 않으면 정상적인 응답을 줄 수 없다. 이에 공격자들은 공격 직전, ZeroSSL이라는 해외 SSL 인증서 발급사에서 3개월 동안 무료로 제공하는 서비스를 통해 developers[.]kakao.com 도메인에 대한 인증서를 발급 및 등록한 것으로 드러났다. BGP Hijacking으로 인해 라우팅 정책이 이미 오염된 상태이기 때문에 이러한 임의의 인증서 등록이 가능했던 것이다.
+> 출처: 보안뉴스
+
+이렇게 HTTPS를 벗어난 해킹시도도 있기 때문에 Multi-factor authentication를 도입하여 보안 레벨을 올리는 것도 좋을 것 같습니다.
+사실 완벽한 보안이라는 것은 존재하지 않기 때문에, 최대한 해커들이 공격하기 어렵게 분산시키거나 복호화를 번거롭게 하는 방법 혹은 보안 레벨을 올리는 방법을 더 찾아봐야 할 것 같습니다.
+
+#### 결론
+
+> **클라이언트단에서 비밀번호를 암호화해서 보내는 것은 오히려 서버에서 validation을 하기 힘들게 만들거나 보안 레벨을 올려주지 않는다.**
+
+### 참고
+
+[https://yoonhogo.github.io/blog/2020-09-08/HTTPS-plain-text-safety/](https://yoonhogo.github.io/blog/2020-09-08/HTTPS-plain-text-safety/)
+
+[https://www.palindrom615.dev/client-side-hashing-is-not-helping](https://www.palindrom615.dev/client-side-hashing-is-not-helping)
