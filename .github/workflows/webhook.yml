@@ -16,4 +16,4 @@ jobs:
           -H "Authorization: Bearer ${WEBHOOK_TOKEN}" \
           -d '{"event": "push"}'
         env:
-          WEBHOOK_TOKEN: ${{ secrets.WEBHOOK_TOKEN }}
+          WEBHOOK_TOKEN: ${{ secrets.WEBHOOK_SECRET }}
