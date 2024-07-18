@@ -9,15 +9,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Generate Signature and Trigger Deployment
-        env:
-          PAYLOAD: '{"event": "push"}'
+      - name: Trigger deployment
         run: |
-          signature=$(echo -n "$PAYLOAD" | openssl dgst -sha1 -hmac "${{ secrets.WEBHOOK_SECRET }}" | sed 's/^.* //')
           curl -X POST https://mj-dev.site/webhook/pull \
           -H "Content-Type: application/json" \
-          -H "X-Hub-Signature: sha1=$signature" \
-          -d "$PAYLOAD"
+          -H "Authorization: Bearer ${{ secrets.WEBHOOK_TOKEN }}" \
+          -d '{"event": "push"}'
