@@ -6,6 +6,7 @@ import Footer from '@/components/Footer'
 import Header from '@/components/Header'
 import SectionContainer from '@/components/SectionContainer'
 import siteMetadata from '@/data/siteMetadata'
+import { GoogleAnalytics } from '@next/third-parties/google'
 import { Metadata } from 'next'
 import localFont from 'next/font/local'
 import { Analytics, AnalyticsConfig } from 'pliny/analytics'
@@ -78,6 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-white pl-[calc(100vw-100%)] text-black antialiased dark:bg-gray-950 dark:text-white">
         <ThemeProviders>
           <Analytics analyticsConfig={siteMetadata.analytics as AnalyticsConfig} />
+          <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_ANALYTICS_ID as string} />
           <SectionContainer>
             <div className="flex h-screen flex-col justify-between font-sans">
               <SearchProvider searchConfig={siteMetadata.search as SearchConfig}>

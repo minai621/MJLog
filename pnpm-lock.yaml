@@ -11,6 +11,9 @@ dependencies:
   '@next/bundle-analyzer':
     specifier: 14.2.3
     version: 14.2.3
+  '@next/third-parties':
+    specifier: ^14.2.5
+    version: 14.2.5(next@14.2.3)(react@18.3.1)
   '@tailwindcss/forms':
     specifier: ^0.5.7
     version: 0.5.7(tailwindcss@3.4.3)
@@ -48,8 +51,8 @@ dependencies:
     specifier: ^0.3.0
     version: 0.3.0(react-dom@18.3.1)(react@18.3.1)
   pliny:
-    specifier: 0.2.1
-    version: 0.2.1(@algolia/client-search@4.24.0)(@types/react@18.2.73)(esbuild@0.20.2)(next@14.2.3)(react-dom@18.3.1)(react@18.3.1)(search-insights@2.14.0)
+    specifier: 0.2.2
+    version: 0.2.2(@algolia/client-search@4.24.0)(@types/react@18.2.73)(esbuild@0.20.2)(next@14.2.3)(react-dom@18.3.1)(react@18.3.1)(search-insights@2.14.0)
   postcss:
     specifier: ^8.4.24
     version: 8.4.24
@@ -2475,6 +2478,17 @@ packages:
     requiresBuild: true
     dev: false
     optional: true
+
+  /@next/third-parties@14.2.5(next@14.2.3)(react@18.3.1):
+    resolution: {integrity: sha512-PDRJm8RZ3rnGNporHKjcdCeZqoW8iJ5uP0clo1Z08TqJiQzuntJ66zrGYCJyqTakx62UJNOp73YsQCFo6kbYYg==}
+    peerDependencies:
+      next: ^13.0.0 || ^14.0.0
+      react: ^18.2.0
+    dependencies:
+      next: 14.2.3(@babel/core@7.24.7)(@opentelemetry/api@1.9.0)(react-dom@18.3.1)(react@18.3.1)
+      react: 18.3.1
+      third-party-capital: 1.0.20
+    dev: false
 
   /@nodelib/fs.scandir@2.1.5:
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -7314,8 +7328,8 @@ packages:
     engines: {node: '>= 6'}
     dev: false
 
-  /pliny@0.2.1(@algolia/client-search@4.24.0)(@types/react@18.2.73)(esbuild@0.20.2)(next@14.2.3)(react-dom@18.3.1)(react@18.3.1)(search-insights@2.14.0):
-    resolution: {integrity: sha512-gPPDbxq2CydTyJsaCcVntFyjvpWfJ7dJ4uFcLcWN2KWKbpMul2+J9niqj0PNfbyvK1kKLe6UIgCVc4VtxfNVNA==}
+  /pliny@0.2.2(@algolia/client-search@4.24.0)(@types/react@18.2.73)(esbuild@0.20.2)(next@14.2.3)(react-dom@18.3.1)(react@18.3.1)(search-insights@2.14.0):
+    resolution: {integrity: sha512-pBKhxNNeSmTKDmI7AVXxOIX0GIP6cAQvgnrZ+VpRXjPeNHbYpTKOS825PSLx1JTIJQNa6Q51sanovCmNTdkV7g==}
     peerDependencies:
       next: '>=13.0.0'
       react: ^17.0.2 || ^18.0.0
@@ -8700,6 +8714,10 @@ packages:
       tslib: ^2
     dependencies:
       tslib: 2.6.3
+    dev: false
+
+  /third-party-capital@1.0.20:
+    resolution: {integrity: sha512-oB7yIimd8SuGptespDAZnNkzIz+NWaJCu2RMsbs4Wmp9zSDUM8Nhi3s2OOcqYuv3mN4hitXc8DVx+LyUmbUDiA==}
     dev: false
 
   /through2@2.0.5:
