@@ -1,3 +1,4 @@
+#!/bin/bash
 # 1. 3000번 포트를 사용하는 프로세스 종료
 PORT=3000
 PIDS=$(sudo netstat -tulnp | grep :$PORT | awk '{print $7}' | cut -d/ -f1)
