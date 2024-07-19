@@ -1,6 +1,6 @@
 ---
 title: '안쓰는 컴퓨터를 배포 서버로 만들기 (2)'
-date: '2024-07-18'
+date: '2024-07-20'
 tags: ['deploy', 'server', 'blog', 'nginx']
 draft: false
 summary: '웹훅을 통해 로컬 pc에 자동으로 배포해봅시다.'
@@ -17,21 +17,7 @@ summary: '웹훅을 통해 로컬 pc에 자동으로 배포해봅시다.'
 여전히 우분투 PC에서 수동으로 pull하고 재실행하는 것은 불편한 것 같습니다. 이를 해소하기 위해, github actions와 웹훅을 이용해서 자동으로 pull하고 재실행하도록 해보겠습니다.
 다음과 같은 구조로 만들면 될 것 같습니다.
 
-```mermaid
-sequenceDiagram
-    participant MacBook as 맥북
-    participant GitHub as GitHub
-    participant Actions as GitHub Actions
-    participant Webhook as Webhook 서버 (포트 3100)
-    participant Website as mj-dev.site (Next.js, 포트 3000)
-
-    MacBook->>GitHub: 블로그 게시글 작성 및 Push
-    GitHub->>Actions: 트리거 GitHub Actions
-    Actions->>Webhook: curl 요청 (mj-dev.site/webhook/pull)
-    Webhook->>Webhook: webhook 수신
-    Webhook->>Website: deploy.sh 실행
-    Website->>Website: Next.js 서버 재실행 (포트 3000)
-```
+![아키텍처](/static/images/iptime-deploy/architecture-mermaid.png)
 
 ## 웹훅 서버 만들기
 
