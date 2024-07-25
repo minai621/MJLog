@@ -1,0 +1,113 @@
+---
+title: '[OSSCA] Yorkie codepair에 기여하기'
+date: '2024-07-26'
+tags: ['ossca', 'opensource', 'yorkie', 'codepair']
+draft: false
+summary: 'OSSCA 프로그램과 Yorkie에 대해 알아보고, Yorkie의 코드베이스에 기여하는 방법을 소개합니다.'
+---
+
+# OSSCA, 오픈소스 컨트리뷰션 아카데미
+
+이번 글에서는 Yorkie 프로젝트에 대해 소개하고, `codepair` 코드베이스에 기여하는 방법을 소개하려고 합니다.
+
+> [OSSCA](https://www.contribution.ac/)는 오픈소스의 진입 장벽을 허물고, 함께 참여, 공유, 협업하여 오픈소스 생태계를 활성화하는 프로그램입니다.
+
+최근에 OSSCA 모집을 시작하였고, 15개의 오픈소프 프로젝트에 참여할 수 있는 기회가 주어졌습니다. 이 중에서 `Yorkie` 프로젝트에 지원해 합격하게 되면서 참여하게 되었습니다.
+
+![OSSCA](/static/images/ossca/ossca-opening.jpeg)
+
+7월 13일에 발대식을 진행하였고, 같은 멘티님들을 만났는데 비슷한 연차인 개발자 분들도 있고 3년차 등 다양한 분들이 계셨습니다.
+멘티님, 멘토님들이 모두 좋으신 분들인 것 같아 서로에게 긍정적인 영향을 교환하고, 많이 배울 수 있을 것 같아서 좋았습니다.
+
+## Yorkie
+
+> [Yorkie](https://yorkie.dev/)는 Realtime Collaboration Engine입니다. CRDT(Conflict-free Replicated Data Type)를 사용하여 여러 사용자가 동시에 동일한 문서를 수정할 수 있도록 지원합니다.
+
+최근에 채널톡의 아티클인 [CRDT vs OT](https://channel.io/ko/blog/crdt_vs_ot)를 읽으며 CRDT에 대해 관심을 가지게 되었습니다.
+그리고 프론트엔드 개발자인 제가 `Typescript`를 베이스로 기여할 수 있기 때문에 Yorkie 프로젝트에 지원하게 되었습니다.
+
+## codepair
+
+> [codepair](https://github.com/yorkie-team/codepair)는 Yorkie의 프로젝트로, 여러 사용자가 동시에 코드를 작성하고 수정할 수 있는 웹 애플리케이션입니다. AI 인텔리전스를 갖춘 오픈소스 실시간 협업 마크다운 편집기이기도 합니다.
+
+악명 높은 CRDT를 사용하는 `Yorkie`의 core 로직을 이해하는 것은 첫 issue로 어려움이 있기 때문에 `codepair` 프로젝트를 통해 실시간 편집에 대해 이해하고자 하였습니다.
+
+## codepair에 첫 기여하기
+
+`codepair` 프로젝트에 기여하기 위해서는 먼저 프로젝트를 로컬에 클론하고, 빌드하는 과정이 필요합니다.
+
+README를 읽으며 codepair의 개발환경을 구축하던 중 명령어를 복사 붙여넣기 했는데, 동작하지 않아 확인해보니 오타가 있는 것을 발견했습니다.
+
+![first-pr](/static/images/ossca/first-pr.png)
+
+이를 수정하여 PR을 보내고 리뷰를 받으면서 첫 기여를 완료하였습니다. (사실 이런 문서 수정은 기여라고 보기는 어렵겠지만, 오픈소스는 누구나 사용할 수 있고, 수정할 수 있기 때문에 중요한 작업이라고 생각합니다.)
+해당 기여 내용은 [update file paths in README.md #233](https://github.com/yorkie-team/codepair/pull/233)에서 확인할 수 있습니다.
+
+## codepair의 issue를 할당받고 해결하기
+
+이제 적절한 `issue`를 찾아서 Yorkie에 대해 더 깊이 이해하고, 코드베이스에 기여해보고 싶었습니다.
+issue는 project backlog에서 관리되고, 난이도에 따라 'XS', 'S', 'M', 'L', 'XL' 등으로 레이블이 붙어 있습니다.
+사실 이미 XS는 위의 문서 수정으로 해결하였다고 생각했었고, 'M' 정도의 이슈를 처리해야 로직을 이해할 수 있을 것이라 생각했습니다.
+
+그렇게 선택하고 issue에 comment를 달아 메인테이너와 소통을 하며, assign을 받았습니다.
+받은 issue는 [Add Document Export Functionality #191](https://github.com/yorkie-team/codepair/issues/191)입니다.
+
+해당 이슈는 `codepair`에서 문서를 export하는 기능을 추가하는 것이었습니다. (마치 노션의 export처럼 동작하게끔 구현하면 될 것 같다고 생각했습니다)
+이제 드디어 프로젝트 코드를 살펴보며 어떻게 해당 기능을 구현할지 고민하고, 코드를 작성할 수 있는 시간이 왔습니다.
+
+### 해당 이슈를 어떻게 해결할 수 있을까?
+
+처음에 생각했던 방법은 클라이언트에서 content를 라이브러리를 통해 바로 `pdf`, `html`, `md`로 변환하는 방법이었습니다.
+그렇게 바로 코드를 구현하고, 다운로드가 잘되는 것을 확인하고 PR을 작성했습니다.
+
+![pr-1](/static/images/ossca/pr-1-image.png)
+
+PR을 작성한 이후, 혹시라도 이상이 없나 테스트 해보니 `pdf`로 변환할 때, 이미지가 제대로 변환되지 않는 문제가 있었습니다.
+해당 문제의 원인은 사용하는 라이브러리인 `jspdf-html2canvas`가 content를 읽을 때 이미지를 변환하지 못했기 때문이었습니다.
+그래서 클라이언트에서 이미지를 변환하는 것이 아니라 서버에서 이를 처리하고 클라이언트에게 전달하는 방법으로 변경하였습니다. [해당 커밋](https://github.com/yorkie-team/codepair/pull/238/commits/4b253e70c5b09314269946020125262cf85d8b64)
+
+이제 로컬에서 테스트했을 때, 완벽하게 동작하는 것을 파악하여 **backend** 코드와 수정된 **frontend** 코드 리뷰를 받고 머지를 하여 첫 번째 기여를 완료했다고 생각했습니다. (backend도 한 레포지토리에서 관리되고 **nest.js**를 사용하였는데 nest.js는 옛날에 사용해본 적이 있어서 익숙했습니다.)
+
+### 하지만 새로운 이슈를 만들어버렸다
+
+그렇게 PR이 머지되면서 CI 테스트가 동작했는데, 테스트가 실패하고 말았습니다.
+이유는 서버에서 사용하는 `html-pdf-node` 라이브러리가 **puppeteer**를 의존성으로 가지고 있었고, **docker**를 사용하는 백엔드 배포 환경에서 동작하지 않기 때문이었습니다.
+
+![build-fail](/static/images/ossca/build-fail.png)
+
+해당 github actions를 확인해보니, `Dockerfile`의 npm ci 단계 중에 `puppeteer`를 설치하는 부분에서 에러가 발생하였던 것이었습니다.
+
+다음과 같이 ci 단계에 `puppeteer`를 설치하는 부분을 추가하여 해결이 될 수 있었습니다.
+
+```Dockerfile
+# Download dependencies for Puppeteer
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+# Install dependencies
+RUN npm ci
+```
+
+그렇게 첫 번째 정식 기여를 완료하였습니다.
+
+- [export markdown을 구현한 PR](https://github.com/yorkie-team/codepair/pull/238)
+- [puppeteer를 Dockerfile에 추가한 PR](https://github.com/yorkie-team/codepair/pull/248)
+- [멘토님께서 코드를 rollback한 PR](https://github.com/yorkie-team/codepair/pull/251)
+
+## 마치며
+
+![discord-message](/static/images/ossca/discord-message.png)
+
+첫 번째 기여로 잡은 문제치고는 다양한 버그와 이슈가 있었지만, 이를 해결하면서 배울 수 있는 것이 많았습니다.
+특히 멘토님들께서 코드를 리뷰해주시고, 도와주셔서 더 빠르게 문제를 해결할 수 있었습니다.
+
+codepair를 통해서 Yorkie가 어떻게 사용되는 지에 대해서 더 깊이 이해할 수 있었습니다.
+특히, 이번에 이미지를 어떻게 PDF로 렌더링 시킬지 고민하면서 CS적으로 많이 배울 수 있었습니다. (사용이 부족했던 **docker**도 사용하게 되었고, puppeteer도 사용해보게 되었습니다. 백엔드 코드도 수정하고요.)
+
+기존의 업무에서 벗어나 커뮤니티에 기여하고, 다양한 사람들과 소통하며 즐겁게 프로젝트에 참여할 수 있어서 매우 만족스럽습니다.
+남은 기간 동안 더 많은 이슈를 해결하면서 오픈소스를 학습하는 방법과 기여하는 방법에 대해 공유하도록 하겠습니다.
