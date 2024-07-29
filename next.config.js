@@ -66,6 +66,7 @@ module.exports = () => {
       dirs: ['app', 'components', 'layouts', 'scripts'],
     },
     images: {
+      formats: ['image/avif', 'image/webp'],
       remotePatterns: [
         {
           protocol: 'https',
