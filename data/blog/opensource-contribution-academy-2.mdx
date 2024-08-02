@@ -1,0 +1,88 @@
+---
+title: '[OSSCA] codepair에 기여하기2 with 오픈소스 모각코 5기'
+date: '2024-08-03'
+tags: ['ossca', 'opensource', 'yorkie', 'codepair']
+draft: false
+summary: '오픈소스 모각코와 함께 issue를 분석해봅시다.'
+---
+
+# 오픈소스 모각코
+
+> 매번 미루거나 도전해보고 싶었던 오픈소스 작업들을 모여서 진행하고 각자 어떤 이슈를 어떤 방식과 코드, PR로 해결했는지 공유하는 모임 입니다
+
+오픈소스 모각코는 멘토링 리드인 [인제님](https://medium.com/@injae-kim)이 운영하시는 그룹으로, 이번 5기에 함께 참여하게 되었습니다.
+이번 기회를 통해 모각코를 함께 하는 멤버들과 작업중인 PR에 대해 함께 해결 방안을 고민하고, 이러한 고민을 공유하며 서로에게 도움이 되는 시간을 가지고 있습니다.
+
+## codepair의 slug 관련 이슈를 해결하기
+
+현재의 `codepair`에서는 workspace를 생성할 때 한글로 생성하면 workspace에 접속하지 못하는 이슈가 있었습니다. [(issue #203)](https://github.com/yorkie-team/codepair/issues/209)
+해당 이슈를 해결하기 위해, 코드베이스에서 어떤 부분에 문제가 생기는지 파악했습니다.
+
+```tsx
+@Injectable()
+export class WorkspacesService {
+  constructor() {}
+  async create(title: string): Promise<Workspace> {
+    const workspace = await this.prismaService.workspace.create({
+      data: {
+        title,
+        slug: slugify(title, { lower: true }),
+      },
+    })
+    return workspace
+  }
+}
+```
+
+`nest.js`에서 workspace를 생성하는 `service 레이어`의 코드를 보면 slug를 생성할 때 `slugify`를 사용하고 있는 것을 확인할 수 있습니다.
+
+![slug-test](/static/images/ossca/slug-test.png)
+
+위와 같이 해당 코드를 테스트했을 때 영문은 올바르게 반환하지만, 한글은 빈 문자열로 반환하는 것을 알 수 있습니다.
+처음에는 아래와 같은 고민을 하였습니다.
+
+> 한글도 로마자로 변환하여 slug를 생성하면 되지 않을까?
+
+곧장 한글을 지원하는 slug 라이브러리를 찾아보았고, `transliterate`라는 라이브러리를 찾아서 적용하고 해결했다고 생각했습니다.
+![transliterate-option](/static/images/ossca/transliterate-option.png)
+
+그렇기에 다국어를 원활하게 지원하기 때문에 해당 라이브러리면 문제를 해결하기에 충분하다고 판단하고 있었습니다.
+이때, 인제님께서 이슈를 살펴보시고는 **medium처럼 string을 인코딩하여 slug를 생성하는건 어떤가요?** 라는 의견을 주셨습니다.
+
+![medium-url](/static/images/ossca/medium-url.png)
+medium의 url을 보면 어떤 문자던 인코딩하여 slug를 생성하는 것을 확인할 수 있습니다.
+이때, 고려하지 못한 부분으로 **프론트에서 입력에 제한을 하지 않는 이상 결국 지원하지 않는 문자가 입력될 것**이고, 어떤 라이브러리를 사용해도 대응할 수 없던 문제가 있다는 것을 알았습니다.
+
+따라서, 여러 상황에서 대응하기 위해 입력을 제한하는 것보다는 **모든 문자를 인코딩하여 slug를 생성하는 것이 더 안전하다고 판단하여** issue에서 진행하던 discussion에서 해당 방법에 대해 논의하였습니다.
+
+![issue-discussion](/static/images/ossca/issue-discussion.png)
+
+인제님께서 해당 방법에 대한 예시도 직접 남겨주셔서 원활하게 이슈에 대해 논의할 수 있었고, 최종적으로 인코딩하여 문제를 해결하는 쪽으로 결정됐습니다.
+
+slug와 관련된 코드들을 `encodeURIComponent`를 사용하여 인코딩하는 방법으로 수정하였고, PR을 작성하여 머지될 수 있었습니다.
+해당 PR은 [Change slug usage to encoded text #261](https://github.com/yorkie-team/codepair/pull/261)에서 확인할 수 있습니다.
+이렇게 모각코 시간에 고민했던 내용으로 작업하여 이슈를 해결할 수 있었고 최종적으로 머지되어 코드베이스에 반영되었습니다.
+
+## 다른 분들의 이슈는 어떤 내용일까?
+
+오픈소스 모각코 시간에는 다른 분들의 이슈를 들을 수 있던 점도 좋았습니다.
+특히 인제님이 작업한 이슈에서는 [Lightweight Contention Management for
+Efficient Compare-and-Swap Operations](https://arxiv.org/pdf/1305.5800v1)라는 논문의 내용을 적용해 성능 개선을 시도하셨다는 내용을 들을 수 있었습니다.
+논문에서는 CAS 작업의 효율성 개선을 통해 동시성 프로그래밍의 성능을 향상시키는 내용을 담고 있는데 [아르메니아](https://github.com/line/armeria/pull/5590)에 이를 적용했다는 내용이 되게 흥미로웠습니다.
+
+![cas-constbackoffcas](/static/images/ossca/cas-constbackoffcas.png)
+내용을 간단히 요약하면 `ConstantBackoffCAS`라는 알고리즘에서 `CAS(compare-and-swap)`이 실패했을 때, 즉시 시도하지 않고 잠시 대기함으로써, 여러 스레드가 동시에 같은 메모리에 접근하는 확률을 줄이는 내용을 담고 있었습니다.
+
+프론트엔드에서의 경합은 비동기 작업에서의 경합밖에 없지만, 백엔드에서는 저수준의 동시성을 위해 튜닝을 할 수 있다는 점이 흥미로웠습니다. (한편으로는, 이런 성능 개선 시도를 할 수 있다는 점이 부러웠습니다. 😅)
+이외로 네 분의 다른 참여자 분들의 이슈에 대해서도 설명을 들을 수 있었고, 다양한 오픈소스의 백그라운드를 알 수 있어서 좋았습니다.
+
+## 마치며
+
+![mogakco-5th](/static/images/ossca/mogakco-5th.png)
+이렇게 한 활동을 통해 6개의 pr이 생겨나 오픈소스 생태계가 건강하게 발전할 수 있었습니다.
+인제님께서 이런 말씀을 하셨던게 기억에 남아서 해당 멘트로 마무리하겠습니다.
+
+> 주말에 돈도 안나오는 일을 왜 해야 하지?
+
+누구보다 오픈소스 생태계에 대해 관심이 많은 인제님께서 이런 말씀을 하셨지만 이렇게 돈도 안나오는 일을 통해 우리가 속한 산업의 생태계를 발전시킬 수 있다는 것이 무척이나 의미있기 때문이라고 생각합니다.
+많은 사람들이 오픈소스에 참여하고, 이를 통해 성장하고 발전하는 모습을 보면서, 이런 활동을 통해 무엇을 얻을 수 있는지에 대해 많은 생각을 하게 되었습니다.
