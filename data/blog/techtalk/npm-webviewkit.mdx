@@ -1,0 +1,472 @@
+---
+title: '웹뷰 라이브러리 webviewkit을 만들어보자'
+date: '2024-09-24'
+tags: ['opensource', 'webview', 'npm', '웹뷰']
+draft: false
+summary: 'npm에 배포할 웹뷰 라이브러리를 만들어보았다.'
+---
+
+import CallOutBanner from '@kiwicom/orbit-components/lib/CallOutBanner'
+
+# 웹뷰 환경에 대한 고민
+
+지난 시간동안 웹뷰 환경에 대해 고민을 많이 했습니다.
+이전에 `피어나` 서비스를 개발하면서 메시지 기반 통신 브릿지를 만들어 사용했었는데, 복잡한 요구사항을 처리하기에는 한계가 있었습니다.
+이번 `2024 feconf`에서 모노레포 환경에서 **React-Native**와 **React**를 한 번만 API를 정의해도 사용할 수 있도록 구현했던 내용이 인상깊었습니다.
+하지만, React-Native를 사용했어야 하기 때문에 웹에서 `Promise`, `버전관리`, `타입안정성` 라이브러리를 개발해보게 되었습니다.
+
+<CallOutBanner>
+  <div style={{ padding: '0px 10px' }}>
+    완성된 결과물은
+    <ul>
+      <li>
+        <a href="https://github.com/minai621/webviewkit">webviewkit</a>
+      </li>
+      <li>
+        <a href="https://www.npmjs.com/package/@webviewkit/environment">@webviewkit/environment</a>
+      </li>
+      <li>
+        <a href="https://www.npmjs.com/package/@webviewkit/bridge">@webviewkit/bridge</a>
+      </li>
+      <li>
+        <a href="https://www.npmjs.com/package/@webviewkit/bridgedocs">@webviewkit/bridgedocs</a>
+      </li>
+    </ul>
+  </div>
+</CallOutBanner>
+에서 확인할 수 있습니다.{' '}
+
+## 무엇을 만들었나요?
+
+### @webviewkit/environment
+
+@webviewkit/environment는 userAgent를 정규식으로 파싱하여 환경을 구분하는 라이브러리입니다.
+
+```js
+import { getEnvironment } from '@webviewkit/environment'
+
+const userAgent = navigator.userAgent
+const env = getEnvironment(userAgent)
+
+console.log(`OS: ${env.os.name} ${env.os.version}`)
+console.log(`Browser: ${env.browser.name} ${env.browser.version}`)
+console.log(`Device type: ${env.device.type}`)
+console.log(`Is WebView: ${env.isWebView}`)
+console.log(`Is Mobile: ${env.isMobile}`)
+```
+
+위와 같이 사용할 수 있습니다.
+webview 환경에 대한 구분은 `/WebView|wv/i`와 같이 정규식을 사용하여 구분하기 때문에 커스텀 Agent를 사용해야 합니다.
+
+### @webviewkit/bridge
+
+@webviewkit/bridge는 웹뷰 환경에서 사용할 수 있는 브릿지 라이브러리입니다.
+기존의 웹뷰 통신은 postMessage를 통해 요청을 보내고, onMessage 이벤트를 통해 응답을 받는 방식이었습니다.
+@webviewkit/bridge는 이러한 방식을 개선하여 Promise를 사용할 수 있도록 하고자 하였습니다.
+
+> promise 방식엔 어떤 장점이 있나요? <br/>
+> 기존의 이벤트 방식은 특정 이벤트를 반복적으로 처리해야 할 때 적합하지만, 한 번 발생하는 이벤트를 처리하고 흐름을 간단히 유지해야 할 때는 Promise 방식이 더 깔끔하고 가독성이 좋습니다
+
+#### 이벤트 방식으로 통신하는 예시
+
+```js
+function sendMessageToNativeApp(requestData) {
+  window.postMessage(requestData, '*')
+}
+
+window.addEventListener('message', function handleNativeResponse(event) {
+  console.log('Received response from native app:', event.data)
+})
+
+sendMessageToNativeApp({ type: 'getData', payload: { userId: 123 } })
+```
+
+#### Promise 방식으로 통신하는 예시
+
+```js
+// 네이티브 앱에 요청을 보내고 응답을 Promise로 처리하는 함수
+function sendMessageToNativeAppWithPromise(requestData) {
+  return new Promise((resolve, reject) => {
+    function handleNativeResponse(event) {
+      if (event.data && event.data.requestId === requestData.requestId) {
+        window.removeEventListener('message', handleNativeResponse)
+        resolve(event.data)
+      }
+    }
+
+    window.addEventListener('message', handleNativeResponse)
+    window.postMessage(requestData, '*')
+
+    // 만약 일정 시간 내 응답이 없으면 타임아웃 처리
+    setTimeout(() => {
+      window.removeEventListener('message', handleNativeResponse)
+      reject(new Error('Timeout: No response from native app'))
+    }, 5000)
+  })
+}
+
+sendMessageToNativeAppWithPromise({ requestData })
+  .then((response) => {
+    console.log('Received response from native app:', response)
+  })
+  .catch((error) => {
+    console.error('Error or timeout:', error)
+  })
+```
+
+위와 같이 더 구조화되어 예측이 가능한 코드를 작성할 수 있습니다.
+그리고, then-catch구조를 사용하여, 응답과 에러 처리를 할 수 있습니다. **(처리를 Promise에게 위임)**
+
+#### @webviewkit/bridge를 사용하는 예시
+
+위에 설명한 promise, 그리고 버저닝과 타입안정성을 제공하는 `@webviewkit/bridge` 라이브러리를 사용하면 아래와 같이 사용할 수 있습니다.
+
+```ts
+import { createBridge } from '@webviewkit/bridge'
+
+// Define request types
+interface UserProfileRequestTypes extends IRequestTypes {
+  getUserProfile: {
+    default: {
+      params: { userId: string }
+      result: { id: string; name: string }
+    }
+    '1.0.0': {
+      params: { userId: string }
+      result: { id: string; name: string }
+    }
+    '2.0.0': {
+      params: { userId: string; includeEmail: boolean }
+      result: { id: string; name: string; email?: string }
+    }
+  }
+  updateUserProfile: {
+    default: {
+      params: { userId: string; name: string }
+      result: { success: boolean }
+    }
+    '1.0.0': {
+      params: { userId: string; name: string }
+      result: { success: boolean }
+    }
+    '2.0.0': {
+      params: { userId: string; name: string; email?: string }
+      result: { success: boolean; updatedAt: string }
+    }
+  }
+}
+
+// Define event types
+interface UserEventTypes extends IEventTypes {
+  onUserStatusChange: {
+    default: { userId: string; status: 'online' | 'offline' }
+    '1.0.0': { userId: string; status: 'online' | 'offline' }
+    '2.0.0': {
+      userId: string
+      status: 'online' | 'offline' | 'away'
+      lastSeen?: number
+    }
+  }
+}
+
+// Create the bridge instance
+const bridge = createBridge<UserProfileRequestTypes, UserEventTypes>({
+  version: '2.0.0',
+  bridges: {
+    Android: {
+      postMessage: (message: string) => {
+        // Call Android native code
+      },
+    },
+    iOS: {
+      postMessage: (message: string) => {
+        // Call iOS native code
+      },
+    },
+    ReactNative: {
+      postMessage: (message: string) => {
+        // Call React Native native code
+      },
+    },
+  },
+  errorHandlers: {
+    default: (error: Error) => {
+      console.error('Bridge error:', error)
+      return error
+    },
+  },
+  defaultTimeout: 5000,
+})
+
+// Make a request
+async function getUserProfile(userId: string) {
+  try {
+    const [result, error] = await bridge.request('getUserProfile', [
+      { version: '2.0.0', params: { userId, includeEmail: true } },
+      { version: '1.0.0', params: { userId } },
+      { version: 'default', params: { userId } },
+    ])
+
+    if (error) {
+      console.error('Error fetching user profile:', error)
+      return
+    }
+
+    if (result) {
+      console.log('User profile:', result)
+
+      if (result.version === '2.0.0' && result.result.email) {
+        console.log('User email:', result.result.email)
+      }
+    }
+  } catch (error) {
+    console.error('Unexpected error:', error)
+  }
+}
+
+// Add a response listener
+bridge.on('onUserStatusChange', (response) => {
+  console.log('User status changed:', response)
+  if (response.version === '2.0.0' && response.data.status === 'away') {
+    console.log('User last seen:', response.data.lastSeen)
+  }
+})
+
+// Usage examples
+getUserProfile('user123')
+```
+
+### @webviewkit/bridgedocs
+
+위와 같이 브릿지를 개발하면서 버전관리와 타입안정성에 대해서 고민하였습니다.
+통신이 필요한 경우 요청과 응답에 대한 타입을 정의하고, 버전 또한 관리해야 하는 문제가 발생하게 됩니다.
+이러한 커뮤니케이션 과정에서 백엔드 서버와의 통신은 swagger와 같은 문서를 통해 확인할 수 있지만, 웹뷰 환경에서는 이러한 문서가 없기 때문에 `@webviewkit/bridgedocs`를 만들었습니다.
+
+먼저 인터페이스를 살펴보기 위해 코드를 먼저 설명하겠습니다.
+IEventTypes, IRequestTypes를 extends하는 타입을 정의하고, 주석으로 description을 작성합니다.
+
+```ts
+import { IEventTypes, IRequestTypes } from '@webviewkit/bridge'
+
+/**
+ * User profile related requests
+ * @since 1.0.0
+ */
+interface UserProfileRequestTypes extends IRequestTypes {
+  /**
+   * Retrieves user profile information
+   * @example getUserProfile({ userId: '123' })
+   */
+  getUserProfile: {
+    /**
+     * @since 1.0.0
+     */
+    default: {
+      params: {
+        /** The unique identifier of the user */
+        userId: string
+      }
+      result: {
+        /** The user's unique identifier */
+        id: string
+        /** The user's name */
+        name: string
+      }
+    }
+    /**
+     * Version with added email field
+     * @since 2.0.0
+     */
+    '2.0.0': {
+      params: {
+        /** The unique identifier of the user */
+        userId: string
+        /** Flag to include email in the response */
+        includeEmail: boolean
+      }
+      result: {
+        /** The user's unique identifier */
+        id: string
+        /** The user's name */
+        name: string
+        /** The user's email (if requested) */
+        email?: string
+      }
+    }
+  }
+}
+
+/**
+ * User event related types
+ * @since 1.0.0
+ */
+interface UserEventTypes extends IEventTypes {
+  /**
+   * Event triggered when user status changes
+   * @example onUserStatusChange({ userId: '123', status: 'online' })
+   */
+  onUserStatusChange: {
+    /** @deprecated Use version 1.0.0 or later */
+    default: {
+      /** The unique identifier of the user */
+      userId: string
+      /** The new status of the user */
+      status: 'online' | 'offline'
+    }
+    /**
+     * @since 1.0.0
+     */
+    '1.0.0': {
+      /** The unique identifier of the user */
+      userId: string
+      /** The new status of the user */
+      status: 'online' | 'offline'
+    }
+    /**
+     * Version with 'away' status and last activity timestamp
+     * @since 2.0.0
+     */
+    '2.0.0': {
+      /** The unique identifier of the user */
+      userId: string
+      /** The new status of the user */
+      status: 'online' | 'offline' | 'away'
+      /** Timestamp of last activity */
+      lastSeen?: number
+    }
+  }
+}
+```
+
+위의 인터페이스를 `@webviewkit/bridgedocs`를 사용하여 문서화하면 아래와 같이 문서를 생성할 수 있습니다.
+
+````markdown
+# API Documentation
+
+## UserProfileRequestTypes
+
+_Available since version 1.0.0_
+
+User profile related requests
+
+### getUserProfile
+
+Retrieves user profile information
+
+#### Versions
+
+<details>
+<summary>Version: default</summary>
+
+_Since: 1.0.0_
+
+**Request:**
+
+| Parameter | Type     | Optional | Description                       |
+| --------- | -------- | -------- | --------------------------------- |
+| `userId`  | `string` | ❌       | The unique identifier of the user |
+
+**Response:**
+
+| Property | Type     | Optional | Description                  |
+| -------- | -------- | -------- | ---------------------------- |
+| `id`     | `string` | ❌       | The user's unique identifier |
+| `name`   | `string` | ❌       | The user's name              |
+
+**Example:**
+
+```typescript
+getUserProfile({ userId: '123' })
+```
+
+</details>
+
+<details>
+<summary>Version: 2.0.0</summary>
+
+_Since: 2.0.0_
+
+Version with added email field
+
+**Request:**
+
+| Parameter      | Type      | Optional | Description                           |
+| -------------- | --------- | -------- | ------------------------------------- |
+| `userId`       | `string`  | ❌       | The unique identifier of the user     |
+| `includeEmail` | `boolean` | ❌       | Flag to include email in the response |
+
+**Response:**
+
+| Property | Type     | Optional | Description                     |
+| -------- | -------- | -------- | ------------------------------- |
+| `id`     | `string` | ❌       | The user's unique identifier    |
+| `name`   | `string` | ❌       | The user's name                 |
+| `email`  | `string` | ✅       | The user's email (if requested) |
+
+**Example:**
+
+```typescript
+getUserProfile({ userId: '123', includeEmail: true })
+```
+
+</details>
+
+## UserEventTypes
+
+_Available since version 1.0.0_
+
+User event related types
+
+### onUserStatusChange
+
+Event triggered when user status changes
+
+#### Versions
+
+<details>
+<summary>Version: default</summary>
+
+> **Deprecated:** Use version 1.0.0 or later
+
+**Event Parameters:**
+
+| Parameter | Type                    | Optional | Description                       |
+| --------- | ----------------------- | -------- | --------------------------------- |
+| `userId`  | `string`                | ❌       | The unique identifier of the user |
+| `status`  | `"online" or "offline"` | ❌       | The new status of the user        |
+
+**Example:**
+
+```typescript
+onUserStatusChange({ userId: '123', status: 'online' })
+```
+
+</details>
+````
+
+추가적으로 지원되는 **jsdoc**의 `@since`, `@deprecated`, `@example` 태그를 사용할 수 있습니다.
+
+## 고민했던 점
+
+라이브러리 개발은 사용자의 요구사항을 충족시키기 위해 끊임없이 고민하고 개선해야 하는 작업입니다. <br/>
+어떻게 해야 다양한 사용자의 요구사항을 수용하면서 구현 스펙을 맞출 수 있는지 범위에 대한 고민이 필요했었습니다.
+특히나, 프론트엔드 라이브러리는 `esm`, `cjs`, `typescript` 등 사용자의 환경도 고려해야 하기 때문에 구현 과제가 더욱 복잡해집니다.
+
+만일, 라이브러리 구현에 관심이 있는 분이라면
+
+1. 사용자의 요구사항을 충족시키기 위한 범위를 정의하고,
+2. 사용자의 환경을 고려하고,
+3. 이를 구현하기 위한 적절한 도구가 무엇인지 고민하기
+
+에 대해서 생각해보면 좋을 것 같습니다.
+
+## 마치며
+
+- npm에 라이브러리를 배포하기 위해서는 배포하는 방법과 관리에 대해서도 알아야 합니다. 이를 위해 `changeset`을 통해 버전을 관리하였습니다.
+- `esm`, `cjs`, `typescript`를 지원하기 위해 tsup을 사용하였습니다.
+- 다양한 패키지를 관리하기 위해 `turborepo`를 사용하였습니다.
+
+또한, 요구사항을 수용하기 위한 고민을 하였습니다. <br/>
+라이브러리를 개발하기 위한 작업은 이렇게 다양한 고민과 작업을 통해 완성됩니다.
+내가 개발하는 환경을 개선하기 위해 고민해보았다면, 라이브러리화하는 것은 어떨까요?
+라이브러리 개발에 관심이 있는 분들을 위해 도움이 되었으면 좋겠습니다. 글 읽어주셔서 감사합니다.
