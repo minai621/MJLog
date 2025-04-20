@@ -1,0 +1,252 @@
+---
+title: '친절하게 설명하며 만드는 나무위키 MCP'
+date: '2025-04-20'
+tags: ['llm', 'mcp', 'typescript', 'server']
+draft: false
+summary: '나무위키 MCP를 만드는 방법을 친절하게 설명합니다.'
+---
+
+> https://modelcontextprotocol.io/introduction 글을 한국어로 번역하고 이해하기 쉽게 바꾼 글이에요.
+
+> typescript sdk를 기준으로 설명해요.
+
+# 한국어로 친절하게 설명하는 MCP-1
+
+## 전체 그림
+
+![전체 그림](/static/images/llm/mcp/architecture.png)
+
+`Host`는 Claude Desktop이나 ChatGPT와 같은 LLM을 의미해요. <br/>
+`Transport`는 사용자가 어떻게 데이터를 주고받을지 정의한 계층이에요. HTTP를 사용하거나, WebSocket을 사용할 수 있어요. <br/>
+`Server`는 사용자가 요청한 데이터를 처리하는 서버를 의미해요. <br/>
+
+정리하자면,
+
+1. 클라이언트는 사용자의 요청을 전달하고,
+2. 서버는 데이터를 준비해서 돌려주고,
+3. 프로토콜 레이어는 이 둘의 대화 규칙을 잡고,
+4. 전송 계층은 실제로 메시지를 이동시키는 역할을 해요.
+
+### Protocol에 대해서 알아봐요.
+
+3, 4번을 보면 규칙을 준수하면서 메시지를 전송해야 해요.
+`typescript sdk`에서는 `Protocol` 클래스에 규칙을 준수하는 4가지 메서드가 있어요.
+
+```ts
+class Protocol<Request, Notification, Result> {
+  // 들어오는 요청(request)을 처리하는 핸들러를 등록합니다.
+  // schema는 요청의 데이터 구조를 검증하는 역할을 하고,
+  // handler는 실제 요청을 처리하는 비동기 함수입니다.
+  setRequestHandler<T>(
+    schema: T,
+    handler: (request: T, extra: RequestHandlerExtra) => Promise<Result>
+  ): void
+
+  // 들어오는 알림(notification)을 처리하는 핸들러를 등록합니다.
+  // schema는 알림 데이터의 구조를 검증하며,
+  // handler는 알림을 처리하는 비동기 함수입니다.
+  setNotificationHandler<T>(schema: T, handler: (notification: T) => Promise<void>): void
+
+  // 요청(request)을 서버(또는 상대방)로 보내고 응답을 기다립니다.
+  // schema를 통해 응답 데이터의 구조를 검증하며,
+  // options를 통해 요청 옵션을 설정할 수 있습니다.
+  request<T>(request: Request, schema: T, options?: RequestOptions): Promise<T>
+
+  // 알림(notification)을 서버(또는 상대방)로 전송합니다.
+  // 응답을 기다리지 않는 일방향 메시지입니다.
+  notification(notification: Notification): Promise<void>
+}
+```
+
+이제 이 규약을 지키면서 통신할 수 있는 방법이 필요해요. 해당 방법은 `Transport` 계층에서 정의하면 돼요.
+
+### Transport에 대해서 알아봐요.
+
+`Transport`는 `Protocol`을 사용하여 데이터를 주고받는 방법을 정의해요. <br/>
+
+#### Stdio Transport
+
+표준 입력과 출력을 사용해서 메시지를 주고받아요.
+표준 입력과 출력이라고 하면 이해하기 어려워요.
+아주 간단하게 생각하면, 같은 방 안에 있는 사람들이 대화한다고 생각하면 돼요. <br/>
+서로 대화하기 위해서 전화를 사용하거나 문자를 보내는 것이 아니라, 같은 방에서 서로 대화하는 것처럼 직접 대화하는 거예요. <br/>
+
+#### HTTP와 SSE transport
+
+`HTTP`는 요청과 응답을 주고받는 방식이에요. <br/>
+`SSE`는 서버에서 클라이언트로 데이터를 푸시하는 방식이에요. 웹소켓과는 다르게 서버에서 클라이언트로만 데이터를 보내는 방식이에요. 주식 서비스를 생각하면, 이해하기 쉬워요. <br/>
+
+### 아주 작은 MCP 서버 만들어보기
+
+MCP 서버는 데이터를 두 방법으로 주고 받아요.
+
+1. Request-Response: 요청에 대한 응답을 제공해요.
+2. Notifications: 응답이 필요없는 요청에 대해서, MCP 서버가 알림만 보내요.
+
+위 방식을 사용해서 나무위키 데이터를 가져오는 서버를 만들어볼 거예요. <br/>
+
+#### 의존성 설치
+
+```json
+{
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.1",
+    "cheerio": "^1.0.0",
+    "tsx": "^4.19.3",
+    "zod": "^3.24.3",
+    "zod-to-json-schema": "^3.24.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
+```
+
+- `@modelcontextprotocol/sdk`: MCP SDK
+- `cheerio`: HTML을 파싱하기 위한 라이브러리
+- `zod`: 데이터 검증을 위한 라이브러리에요. mcp/sdk에서 사용해요.
+- `zod-to-json-schema`: zod를 사용해서 json schema를 만들기 위한 라이브러리에요.
+
+#### MCP Server 객체
+
+가장 먼저 MCP의 진입점이 가능하도록 하게 하는 `Server` 객체를 만들어야 해요. <br/>
+
+```ts
+const VERSION = '0.1.0'
+const server = new Server(
+  {
+    name: 'namuwiki-mcp',
+    version: VERSION,
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  }
+)
+```
+
+- `name`: MCP 서버의 이름이에요.
+- `version`: MCP 서버의 버전이에요.
+- `capabilities`: MCP 서버의 기능이에요.
+  - `tools`: MCP 서버가 제공하는 도구에 대한 정보에요. 아직은 정의하지 않아도 괜찮아요.
+
+#### fetch-wiki.ts
+
+나무위키 데이터를 가져와서 `cheerio`로 파싱해서, content 데이터를 가져와요.
+
+```ts
+import * as cheerio from 'cheerio'
+
+export async function fetchNamuWiki(title: string): Promise<{
+  contentHtml: string
+}> {
+  const encoded = encodeURIComponent(title)
+  const url = `https://namu.wiki/w/${encoded}`
+
+  const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`Failed to fetch NamuWiki page: ${res.status}`)
+  }
+  const html = await res.text()
+
+  const $ = cheerio.load(html)
+
+  const nodeTexts = $('#app')
+    .find('*') // app 이하 모든 요소
+    .contents() // 텍스트·요소 모두
+    .filter((i, node) => node.type === 'text') // 텍스트 노드만 남기고
+    .map((i, node) => $(node).text().trim()) // 각각의 텍스트 추출
+    .get() // 배열로 변환
+    .join(' ') // 원하는 구분자로 합치기
+
+  if (!nodeTexts.length) {
+    throw new Error('Could not locate article content')
+  }
+
+  return {
+    contentHtml: nodeTexts,
+  }
+}
+```
+
+#### tools 정의
+
+이전에 server 객체를 만들 때, `tools`를 빈 객체로 정의했었어요.
+이제 `tools`를 정의해볼 거예요.
+
+- `tools`는 MCP 서버가 제공하는 도구에 대한 정보에요.
+- `tools`는 `name`, `description`, `inputSchema`로 이루어져 있어요.
+
+아래와 같이 setRequestHandler의 인터페이스에 맞게 첫 번째 인자로 `ListToolsRequestSchema`를 넣어주고, 두 번째 인자로 콜백을 넣어줘요.
+콜백은 tools 배열을 반환해요.
+
+```ts
+const FetchWikiSchema = z.object({
+  title: z.string().describe('나무위키 문서 제목'),
+})
+
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: [
+      {
+        name: 'fetch_namuwiki_article',
+        description: '나무위키 문서 내용을 불러옵니다.',
+        inputSchema: zodToJsonSchema(FetchWikiSchema),
+      },
+    ],
+  }
+})
+```
+
+#### tools의 request handler 정의
+
+앞서 정의한 tools에 맞게 request handler를 정의해줘야 해요.
+`CallToolRequestSchema`에 맞게 콜백에 각 tool에 대한 처리를 해주면 돼요.
+MCP Client로부터 넘겨받은 인자를 `fetchNamuWiki`에 넘겨주고, 결과를 반환해줘요.
+
+```ts
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params
+  if (name === 'fetch_namuwiki_article') {
+    try {
+      const parsed = FetchWikiSchema.parse(args)
+      const data = await fetchNamuWiki(parsed.title)
+
+      const contentHtml = data?.contentHtml ?? '내용을 불러올 수 없습니다.'
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `📘 ${contentHtml}`,
+          },
+        ],
+      }
+    } catch (error) {
+      // 에러 처리
+    }
+  }
+  throw new Error(`도구 '${name}'을(를) 찾을 수 없습니다.`)
+})
+```
+
+#### MCP Server 시작하기
+
+마지막으로 MCP 서버를 시작해줘야 해요.
+`Claude Desktop`과 같은 MCP Client에서 요청을 받을 수 있도록 해줘야 해요.
+
+하지만 아래와 같이 쉽게 inspector를 사용해서 테스트 해볼 수도 있어요.
+
+```sh
+npx @modelcontextprotocol/inspector node wiki-mcp/dist/server.js
+```
+
+위 명령어를 실행하면 `http://127.0.0.1:6274` 주소로 MCP 서버가 실행돼요.
+서버가 실행됐으면 상단 탭에서 Tools를 선택하고, fetch_namuwiki_article을 선택해줘요.
+그런 다음, title에 `이순신`을 입력하고 Run Tool 버튼을 눌러줘요.
+
+![inspector](/static/images/llm/mcp/mcp-inspector.png)
+
+이제 MCP를 사용할 준비가 완료됐어요! 이런 방식으로 앞으로 여러분만의 MCP 서버를 만들어보세요.
