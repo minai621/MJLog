@@ -37,13 +37,13 @@ description: 'RSC가 캐시돼어 생긴 일'
 
 ## 그런데
 
-![next-deploy-example](/static/images/next/suspensive-rsc-debug/next-deploy-example.png)
+![next-deploy-example](/static/images/next/suspensive-rsc-debug/next-deploy-example1.png)
 이후에 다른 Next.js 프로젝트에서도 재현되는 문제인지 확인하기 위해서 **https://vercel.cms-demo.wix.dev/** 를 방문해서 네트워크 탭을 열어보니 이미 ?\_rsc=key 와 같이 쿼리 파라미터가 추가되어 있었어요.
 
 이미 Next.js에서도 해결됐던 문제인거죠. 그래서 관련된 이슈를 찾아보게 됐어요.
 
 - [Redirects drop \_rsc & lead to dirty cache in Chrome](https://github.com/vercel/next.js/issues/79346)
-- [v15.3.3](https://github.com/vercel/next.js/releases/tag/v15.3.3)
+- [Next.js release 15.3.3](https://github.com/vercel/next.js/releases/tag/v15.3.3)
 
 Next.js 15.3.3 버전 이전에는 쿼리 파라미터가 추가되지 않아서 캐시된 응답이 보였던 것이었어요.
 15.3.3 버전에서는 이미 해결된 문제였죠. 하지만 suspensive는 이미 15.3.3 버전을 사용하고 있었어요.
