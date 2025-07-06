@@ -1,0 +1,72 @@
+---
+title: 'Suspensive 문서에서 생긴 RSC Debug 이야기'
+date: '2025-07-07'
+tags: ['Next.js', 'RSC', 'Debug']
+draft: false
+description: 'RSC가 캐시돼어 생긴 일'
+---
+
+# Suspensive 문서에서 생긴 RSC Debug 이야기
+
+어느날 Suspensive의 문서를 보다가 다시 내용을 찾기 위해 크롬탭을 열었더니 직렬화된 RSC 응답이 보였던 문제가 있었어요.
+
+![suspensive-rsc-debug-1](/static/images/next/suspensive-rsc-debug/rsc-response.png)
+
+단순히 탭을 다시 열었을 뿐인데 왜 캐시된 응답이 RSC로 보이는지 궁금해서 디버그했던 이야기를 알려드릴게요.
+
+## 문제 상황
+
+상황은 단순하게 문서를 보다가 다시 내용을 찾기 위해 크롬탭을 열었더니 직렬화된 RSC 응답이 보이는 것이었어요.
+
+가장 처음으로는 당연히 **dynamic routes**를 하거나 **path rewrite**로 인해 root의 \_next 폴더를 찾지 못한다고 생각했어요.
+그래서 개발자 도구의 Source 탭에 \_next가 안잡히는 문제라고 생각했습니다.
+하지만, path가 안잡혀서 직렬화된 RSC가 보이는 것이 이상하다고 생각했어요. 그렇게 리포지토리를 클론하고 빌드된 결과물을 확인했더니 원인은 그곳에 있었습니다.
+
+## 문제 원인
+
+![build-next](/static/images/next/suspensive-rsc-debug/build-next.png)
+
+문제는 빌드된 폴더의 server/app 하위에 **ko.rsc** 파일의 내용이 바로 직렬화된 RSC 응답이었어요.
+네트워크 탭을 열고 **https://suspensive.org/ko** 를 확인해보니 ko로 요청하는 요청이 두 개가 있었어요.
+
+![network-tab](/static/images/next/suspensive-rsc-debug/network-tab.png)
+
+그래서 이게 캐시돼어 탭을 다시 열 때 RSC가 보였던 것이었어요.
+
+따라서, RSC 요청을 분기할 수 있는 query param을 추가하면 해당 이슈를 해결할 수 있을 거라고 생각했어요.
+
+## 그런데
+
+![next-deploy-example](/static/images/next/suspensive-rsc-debug/next-deploy-example.png)
+이후에 다른 Next.js 프로젝트에서도 재현되는 문제인지 확인하기 위해서 **https://vercel.cms-demo.wix.dev/** 를 방문해서 네트워크 탭을 열어보니 이미 ?\_rsc=key 와 같이 쿼리 파라미터가 추가되어 있었어요.
+
+이미 Next.js에서도 해결됐던 문제인거죠. 그래서 관련된 이슈를 찾아보게 됐어요.
+
+- [Redirects drop \_rsc & lead to dirty cache in Chrome](https://github.com/vercel/next.js/issues/79346)
+- [v15.3.3](https://github.com/vercel/next.js/releases/tag/v15.3.3)
+
+Next.js 15.3.3 버전 이전에는 쿼리 파라미터가 추가되지 않아서 캐시된 응답이 보였던 것이었어요.
+15.3.3 버전에서는 이미 해결된 문제였죠. 하지만 suspensive는 이미 15.3.3 버전을 사용하고 있었어요.
+
+## 왜 해당 버전에서 문제가 발생했을까요?
+
+suspensive의 요청에는 쿼리 파라미터가 추가되지 않았을 뿐더러, Vary 헤더가 없는 문제가 있었어요.
+
+<div style={{ display: 'flex', gap: '32px' }}>
+  <div>![network-tab](/static/images/next/suspensive-rsc-debug/network-tab.png)</div>
+  <div>![next-deploy-example1](/static/images/next/suspensive-rsc-debug/next-deploy-exam1.png)</div>
+</div>
+
+두 요청의 차이가 보이시나요?
+
+1. \_rsc 쿼리 파라미터의 부재
+2. Vary 헤더의 부재
+
+이 두 가지가 문제였어요. Vary 헤더가 없으면, 브라우저는 해당 요청에 대해 캐시를 공유하게 되고, 쿼리 파라미터가 없는 요청은 캐시된 RSC 응답을 그대로 보여주게 되는 거죠.
+
+### 마무리하며
+
+해당 프로젝트를 clone하고 나서 직접 Vercel에 배포하니까 Vary 헤더가 추가되었어요.
+아마도 suspensive를 배포하면서 CDN에 문제가 있었던 것 같아요.
+해당 이슈를 직접 해결하진 않았지만, [Next.js의 RSC가 어떻게 반환되는지](https://mj-dev.site/blog/next/nextjs-two-phase-rendering) 알아볼 수도 있었던 학습 기회가 돼주었어요.
+여러분도 비슷한 문제를 겪고 있다면 참고해보세요. 감사합니다.
