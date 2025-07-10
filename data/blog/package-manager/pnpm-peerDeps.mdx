@@ -1,0 +1,167 @@
+---
+title: '[플랫폼] pnpm에서 peerDependencies와 peerDependenciesMeta를 사용한 멀티 어댑터 라이브러리 설계'
+date: '2025-07-11'
+tags: ['npm', 'pnpm', 'peerDependencies', 'Module Resolution', 'Redis']
+draft: false
+description: 'peerDependencies로 어떤 최적화를 이뤄낼 수 있을까요?'
+---
+
+이 글에서는 **`peerDependencies`를 어떻게 활용하면 인스턴스 충돌을 막고, 필요한 모듈만 설치할 수 있을지** 고민하며 정리한 내용을 공유합니다.  
+가상의 시나리오인 **Redis v5 ↔︎ v4** 버전 충돌 사례로, `peerDependenciesMeta.optional`을 지정해 라이브러리 개발자가 사용자의 의존성을 존중하는 방식으로 구현해볼 수 있을 것 같아요.
+
+---
+
+## 이 글에 필요한 개념과 내용을 요약해봤어요
+
+| 주제                                                          | 정리                                                                                                                                     |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. peerDependencies란 무엇인가?**                           | 라이브러리가 직접 의존성을 갖지 않고 **호스트**(사용자)가 설치한 모듈을 **공유(단일 인스턴스)** 하도록 위임하는 필드예요.                |
+| **2. 인스턴스 충돌을 막기 위한 Hoisting**                     | 패키지 매니저가 peerDeps를 **루트**로 끌어올려(hoist) **중복 설치**를 방지하고, 라이브러리·호스트가 **같은 객체**를 사용하도록 강제해요. |
+| **3. optional peerDependencies를 써야 하는 이유가 있을까요?** | Redis가 필요 없는 환경에서는 설치를 건너뛰어 **빌드 크기·설치 속도**를 최적화할 수 있어요.                                               |
+| **4. 구현 아이데이션을 해보자**                               | `package.json`에 `peerDependenciesMeta.optional` 선언 → 런타임에서 **조건부(동적) import** 혹은 **서브-엔트리**로 안전하게 로딩          |
+
+---
+
+### 중복 인스턴스 시나리오를 상상해보자
+
+```text
+my-app/
+ ├─ node_modules/
+ │  ├─ my-cache/
+ │  │   └─ node_modules/
+ │  │      └─ redis   (v5)  ← my-cache가 품고 있는 인스턴스
+ │  └─ redis          (v4)  ← 앱이 원래 쓰던 인스턴스
+```
+
+my-app에서 my-cache라는 라이브러리를 사용하고 있어요. 이 라이브러리는 redis를 의존성으로 가지고 있어요.
+이 때 라이브러리 내부에도 redis가 있고, 루트에도 redis가 있으면 두 인스턴스가 메모리에 올라가요.
+
+- **문제 1 — 연결 풀 이중화**
+  두 클라이언트가 서로 다른 TCP 연결을 유지 → 같은 키를 써도 값이 분산될 수 있어요.
+
+- **문제 2 — API 버전 불일치**
+  라이브러리는 `client.connect()`(v5) 호출, 앱 코드는 `client.on('ready')`(v4)를 기대 → 런타임 오류가 발생할 수 있어요.
+
+`peerDependencies` + **Hoisting**을 적용하면 루트에 **하나의 redis 인스턴스**만 남아 위 상황을 방지할 수 있어요.
+
+---
+
+## my-cache의 개발자가 되어 라이브러리를 만들어보자
+
+라이브러리 개발자 입장에서, **사용자(호스트)의 Redis 버전을 그대로 쓰면서도 필요한 환경에서만 Redis를 설치**하도록 설계해볼게요.
+
+### 1) `package.json` 선언
+
+```jsonc
+{
+  "peerDependencies": {
+    "redis": "^4 || ^5", // v4·v5 모두 허용
+  },
+  "peerDependenciesMeta": {
+    "redis": { "optional": true }, // Redis 없이도 설치 가능
+  },
+  "exports": {
+    ".": "./dist/core.js",
+    "./redis": "./dist/redis.js", // Redis 전용
+  },
+}
+```
+
+### 2) 라이브러리 코드 설계
+
+#### `src/core.ts`
+
+기본적으로 Map을 이용한 인메모리 캐시를 구현해요. 혹은 `Memcached`를 사용할 수도 있어요. 예시에서는 이해가 쉽도록 단순히 Map을 사용해 간단하게 구현했어요.
+
+```ts
+const store = new Map<string, string>()
+
+export function set(key: string, value: string) {
+  store.set(key, value)
+}
+
+export function get(key: string) {
+  return store.get(key)
+}
+```
+
+#### `src/redis.ts`
+
+Redis 어댑터를 구현해요. 이 때 호스트의 redis 인스턴스를 사용해요.
+
+```ts
+// src/redis.ts
+type V5 = {
+  connect(): Promise<void>
+  set(k: string, v: string): Promise<void>
+  get(k: string): Promise<string | null>
+  quit(): Promise<void>
+}
+
+type V4 = {
+  set(k: string, v: string, cb: (e: Error | null) => void): void
+  get(k: string, cb: (e: Error | null, v: string | null) => void): void
+  once(ev: 'ready' | 'error', fn: (...a: unknown[]) => void): void
+  end(): void
+}
+
+// 1) 호스트의 redis 한 번만 import
+const r = (await import('redis')) as { createClient(): V5 & V4 }
+const client = r.createClient()
+
+// 2) 연결 분기
+if ('connect' in client)
+  await client.connect() // v5
+else
+  await new Promise<void>((ok, err) => {
+    // v4
+    client.once('ready', ok)
+    client.once('error', err)
+  })
+
+// 3) get / set 분기
+export function set(key: string, val: string): Promise<void> {
+  return 'connect' in client // v5
+    ? client.set(key, val)
+    : new Promise((ok, err) => client.set(key, val, (e) => (e ? err(e) : ok())))
+}
+
+export function get(key: string): Promise<string | null> {
+  return 'connect' in client // v5
+    ? client.get(key)
+    : new Promise((ok, err) => client.get(key, (e, v) => (e ? err(e) : ok(v))))
+}
+
+export async function close() {
+  if ('quit' in client)
+    await client.quit() // v5
+  else client.end() // v4
+}
+```
+
+---
+
+## 라이브러리 **사용자** 입장에서의 설치 & 코드
+
+| 시나리오                   | 설치                      | import                                      |
+| -------------------------- | ------------------------- | ------------------------------------------- |
+| **Redis 사용** (v4 or v5)  | `pnpm add redis my-cache` | `import { set, get } from 'my-cache/redis'` |
+| **Redis가 필요 없는 환경** | `pnpm add my-cache`       | `import { set, get } from 'my-cache'`       |
+
+---
+
+## 이로써 해결할 수 있는 문제
+
+- **연결 풀 이중화** → 루트에 **하나의 redis 인스턴스**만 존재해요.
+- **API 버전 불일치** → 라이브러리가 **호스트가 고른 버전**을 그대로 씁니다.
+- **불필요한 설치·번들** → Redis 없는 빌드(테스트·서버리스)에서 설치·번들링 자체가 생략돼요.
+
+---
+
+### 마무리 체크리스트
+
+- [x] **peerDependencies** 로 단일 인스턴스 보장
+- [x] **peerDependenciesMeta.optional** 로 선택 설치 허용
+- [x] **서브-엔트리** (`"./redis"`) 로 드라이버 코드 분리
+
+이렇게 설계하면 **가볍고, 충돌 없는 라이브러리**를 만들 수 있어요. 읽어주셔서 감사해요.
