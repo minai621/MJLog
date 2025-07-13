@@ -10,7 +10,9 @@
 set -euo pipefail
 
 ### ─────── 사용자 설정값 ────────────────────────────────
-APP_NAME="nextjs-app"            # Deployment & 이미지 이름 (로컬 태그)
+APP_NAME="nextjs-app"           # Deployment 이름
+CONTAINER_NAME="nextjs"         # Deployment 내 컨테이너 이름
+
 NAMESPACE="monitoring"          # K8s 네임스페이스
 PORT=3000                        # 로컬 dev 포트 (종료 대상)
 K3S_CTR="sudo k3s ctr"          # containerd CLI alias (보통 sudo 필요)
@@ -64,13 +66,14 @@ ${K3S_CTR} images tag "${IMPORTED_NAME}" "${APP_NAME}:latest" || error "ctr tag 
 
 ### 4. 롤링 재시작 --------------------------------------
 log "▶︎ kubectl set image"
-kubectl -n "${NAMESPACE}" set image "deployment/${APP_NAME}" "${APP_NAME}=${IMAGE_NAME}" || error "set image 실패"
+kubectl -n "${NAMESPACE}" set image "deployment/${APP_NAME}" "${CONTAINER_NAME}=${IMAGE_NAME}" || error "set image 실패"
 
 log "▶︎ kubectl rollout restart"
 kubectl -n "${NAMESPACE}" rollout restart "deployment/${APP_NAME}" || error "rollout 실패"
 
 log "▶︎ rollout status (wait)"
 kubectl -n "${NAMESPACE}" rollout status "deployment/${APP_NAME}"
+
 
 ### 5. stash pop (있으면) --------------------------------
 if [[ "${STASHED:-0}" -eq 1 ]]; then
