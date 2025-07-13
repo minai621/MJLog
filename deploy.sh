@@ -63,6 +63,9 @@ IMPORTED_NAME="${REGISTRY_PREFIX}/${IMAGE_NAME}"
 ${K3S_CTR} images tag "${IMPORTED_NAME}" "${APP_NAME}:latest" || error "ctr tag 실패"
 
 ### 4. 롤링 재시작 --------------------------------------
+log "▶︎ kubectl set image"
+kubectl -n "${NAMESPACE}" set image "deployment/${APP_NAME}" "${APP_NAME}=${IMAGE_NAME}" || error "set image 실패"
+
 log "▶︎ kubectl rollout restart"
 kubectl -n "${NAMESPACE}" rollout restart "deployment/${APP_NAME}" || error "rollout 실패"
 
