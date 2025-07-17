@@ -1,0 +1,106 @@
+---
+title: '[홈서버] 홈서버를 재부팅하니 블로그가 다운됐어요'
+date: '2025-07-18'
+tags: ['k3s', 'Kubernetes', 'Nginx', 'DevOps']
+draft: false
+description: '재부팅 한 번에 블로그가 다운된 사건을 파헤쳐요'
+---
+
+> 요약: 3일간 안정적으로 운영되던 k3s 홈서버가 재부팅 후 갑자기 접속 불능 상태가 되었어요. 처음엔 Nginx 설정을 의심했지만, 문제의 근본 원인은 k3s에 기본 설치된 Traefik Ingress Controller가 80/443 포트를 선점하면서 발생한 충돌 때문이었답니다. 이 글은 문제 해결 과정에서 알게 된 쿠버네티스 네트워킹 핵심 개념과, 더 나은 인프라 구성을 위한 기술적 고민을 담은 기록이에요.
+
+# 3일 만의 재부팅, 그리고 접속 불가
+
+이전 글에서 k3s 기반의 모니터링 시스템을 구축한 뒤, 제 홈서버는 3일 동안 아무 문제 없이 잘 작동했어요. 그러다 새로 구입한 맥미니 자리를 마련하고 콘센트 케이블을 정리하느라 서버 전원을 잠시 내렸다가 다시 키게 됐어요.
+
+단순한 재부팅이었는데, 블로그(mj-dev.site)에 접속하자 404 Not Found 오류가 발생했어요.
+
+## 문제가 뭐였을까?
+
+Nginx 리버스 프록시를 직접 설정했기 때문에 아마 Nginx가 문제일 것 같다고 생각했어요.
+그래서 아래의 순서대로 문제를 파헤쳤어요.
+
+1. Nginx 서비스 상태 확인: `sudo systemctl status nginx` 명령어로 서비스가 정상 실행 중임을 확인했어요.
+2. 포트 점유 상태 확인: `sudo lsof -i -P -n | grep LISTEN` 명령어로 Nginx가 80번과 443번 포트를 정상적으로 리스닝하고 있음을 확인했어요.
+3. SSL 인증서 확인: 원인을 찾지 못해 다른 가능성을 확인하던 중, openssl 명령어로 서버의 SSL 인증서를 직접 확인했어요.
+
+SSL 인증서에서 문제 해결의 힌트를 얻었어요.
+
+```bash
+openssl s_client -connect mj-dev.site:443 -servername mj-dev.site | head
+```
+
+### SSL 인증서 확인 결과
+
+```text
+CONNECTED(00000003)
+depth=0 CN = TRAEFIK DEFAULT CERT
+```
+
+제가 설정한 Let's Encrypt 인증서가 아닌, TRAEFIK DEFAULT CERT라는 예상치 못한 인증서가 응답으로 돌아왔어요.
+이로써 트래픽이 Nginx에 도달하지 않고, Traefik이라는 다른 무언가에 의해 처리되고 있음을 알게 되었어요.
+
+### Ingress Controller와 포트 충돌의 이해
+
+Traefik의 정체를 파악하며 쿠버네티스 네트워킹의 핵심 개념을 이해하게 되었어요.
+
+- Ingress Controller의 역할: 쿠버네티스 클러스터의 서비스는 기본적으로 외부에서 직접 접근할 수 없어요.
+
+  문제의 본질 - 포트 충돌: 서버가 재부팅되면서 k3s가 먼저 실행되고, 기본 설정에 따라 Traefik이 80/443 포트를 점유했어요.
+  그 후 Nginx 서비스가 시작되었지만, 이미 사용 중인 포트를 온전히 사용할 수 없었던 거죠. 결과적으로 mj-dev.site로 들어온 모든 요청은 Nginx가 아닌 Traefik으로 전달되었고, Traefik에는 해당 도메인에 대한 라우팅 규칙이 없었기 때문에 404 Not Found와 기본 인증서를 반환했던 것이었어요.
+
+### Traefik 비활성화로 충돌 제거로 해결
+
+제 시스템 구성에서는 외부 프록시로 Nginx를 사용하기로 했으므로, k3s의 Traefik을 비활성화하여 포트 충돌의 근본 원인을 제거했어요.
+
+1. 실행 중인 Traefik 리소스 삭제
+   먼저 현재 포트를 점유하고 있는 Traefik의 Service와 Pod를 삭제하여 Nginx가 즉시 포트를 사용할 수 있도록 조치했어요.
+
+```bash
+
+# Traefik 서비스 삭제
+sudo k3s kubectl delete svc -n kube-system traefik
+
+# 실행 중인 Traefik Pod 확인 및 삭제
+POD_NAME=$(kubectl get pod -n kube-system -l app.kubernetes.io/name=traefik -o jsonpath='{.items[0].metadata.name}')
+kubectl delete pod -n kube-system $POD_NAME
+```
+
+2. Traefik 자동 재설치 방지
+   k3s가 재부팅될 때마다 Traefik을 다시 생성하지 않도록, 관련 manifest 파일을 제거했어요.
+
+```bash
+sudo rm /var/lib/rancher/k3s/server/manifests/traefik.yaml
+```
+
+이 조치 후, Nginx가 80/443 포트를 완전히 제어하게 되어 블로그 접속이 정상화되었습니다.
+
+### 문제 예방을 위한 아키텍처 선택
+
+이번 경험을 통해 향후 유사한 문제를 방지하기 위한 두 가지 아키텍처를 고민하게 되었어요.
+
+1. 외부 프록시 + NodePort 방식
+   호스트 머신에 Nginx를 직접 설치하고, k3s의 서비스는 NodePort 타입으로 노출하여 Nginx와 연결하는 방식이에요.
+
+이 방식을 선택할 경우, k3s 설치 단계에서 --disable traefik 옵션을 추가하여 Ingress Controller를 처음부터 설치하지 않는 것이 가장 명확한 방법일거에요.
+
+2. Ingress Controller 활용 방식 (k3s 네이티브)
+   호스트의 Nginx 대신, k3s의 Traefik을 그대로 사용해요. 그리고 Ingress라는 쿠버네티스 리소스를 YAML로 작성하여 라우팅 규칙을 선언적으로 관리하는 거예요.
+
+장점: 모든 라우팅 설정이 쿠버네티스 내부에서 코드로 관리되므로 일관성이 높고, TLS 인증서 자동화(cert-manager 연동) 등 k8s 생태계의 기능을 최대한 활용할 수 있어요.
+
+## 마무리하며: k3s 네이티브 기술로의 통합을 향해
+
+Nginx를 직접 제어하는 방식은 익숙했지만, 결과적으로 쿠버네티스가 제공하는 기본 기능과 충돌을 일으켰어요. 이는 제가 아직 쿠버네티스의 작동 방식을 완전히 이해하지 않고 기존 인프라 관리 방식을 고수했기 때문에 발생한 문제였죠.
+
+이번 경험을 통해, 장기적으로 안정적이고 관리하기 쉬운 시스템을 위해서는 외부 도구에 의존하기보다 k3s의 Ingress와 같은 네이티브 기술을 적극적으로 활용하여 모든 구성을 쿠버네티스 클러스터 안으로 통합하는 방향이 더 옳다는 결론을 내렸답니다.
+
+다음 프로젝트의 목표는 외부 Nginx를 제거하고, Traefik Ingress Controller를 통해 모든 서비스를 관리하는 거예요. 이를 통해 더 일관성 있고 자동화된 데브옵스 환경을 구축해나갈 계획입니다!
+
+## 이번 사건을 통해 배울 수 있는 점들
+
+이 경험을 통해 다음과 같은 기술적, 운영적 지식을 얻을 수 있어요.
+
+1. SSL/TLS 인증서의 중요성 및 디버깅: `openssl s_client` 명령어를 활용해서 서버가 어떤 SSL 인증서를 제공하는지 직접 확인하는 방법을 배웠어요. 이는 예상치 못한 인증서가 반환될 때 트래픽 라우팅 문제를 파악하는 데 결정적인 단서가 되줄거에요.
+2. 네트워크 포트 충돌 및 해결: `sudo lsof -i -P -n | grep LISTEN` 명령어로 어떤 프로세스가 특정 포트를 점유하고 있는지 확인하는 방법을 알게 되었어요. 특히 서버 재부팅 시 여러 서비스가 동일한 포트를 선점하려 할 때 발생하는 포트 충돌(Port Conflict)이 일어난 다는 것을 알게 됐어요.
+3. k3s의 특성: k3s가 설치 시 Traefik Ingress Controller를 기본으로 포함하고 활성화한다는 중요한 사실을 알게 되었어요. --disable traefik 옵션을 사용해서 k3s 설치 시 특정 기본 컴포넌트를 비활성화하는 방법을 통해 문제를 해결할 수 있었습니다.
+4. 쿠버네티스 네트워킹 개념 (Ingress Controller, NodePort): Ingress Controller가 클러스터 외부에서 들어오는 HTTP/S 트래픽을 내부 서비스로 라우팅하는 핵심 구성 요소임을 명확히 이해했어요. NodePort 서비스 타입이 외부에서 클러스터 내부 서비스로 접근할 수 있는 통로를 제공하지만, 보통은 외부 로드 밸런서나 프록시와 함께 사용된다는 점도 알게 되었습니다.
